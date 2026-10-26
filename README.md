@@ -1,3 +1,5 @@
+![Thermal RGB for Linux — CPU/GPU temperature controls RGB colour](docs/assets/banner.png)
+
 # Thermal RGB for Linux
 
 CPU temperature controls the fan lighting; GPU temperature controls the GPU lighting.
