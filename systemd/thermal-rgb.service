@@ -1,0 +1,14 @@
+[Unit]
+Description=Temperature-responsive CPU fan and GPU lighting
+Requires=openrgb-local.service
+After=openrgb-local.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+ExecStart=%h/.local/share/thermal-rgb/.venv/bin/python -u %h/.local/share/thermal-rgb/thermal_rgb.py
+Restart=on-failure
+RestartSec=7
+
+[Install]
+WantedBy=default.target

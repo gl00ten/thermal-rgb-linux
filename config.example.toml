@@ -1,0 +1,30 @@
+# Copy is installed at ~/.config/thermal-rgb/config.toml.
+# Edit that file, then: systemctl --user restart thermal-rgb
+
+[devices]
+motherboard_name = "X570-P"       # ASUS PRIME X570-P
+argb_zone = "Aura Addressable 1"  # All 6 fans (shared header)
+argb_led_count = 8                # Known working zone size for this build
+gpu_name = "RTX 3080"            # Gigabyte RTX 3080 Gaming OC
+nvidia_gpu_index = 0
+
+[temperatures]
+room_temp = 25.0  # assumed reference, not an ambient sensor reading
+cpu_red = 90.0
+gpu_red = 85.0
+
+[animation]
+breathing = true
+breath_min = 0.50
+breath_period = 6.0
+cpu_max_brightness = 0.40
+gpu_max_brightness = 1.00
+sensor_interval = 2.0
+fan_interval = 0.04  # maximum 25 fan updates/sec
+gpu_interval = 0.06  # maximum ~17 GPU updates/sec
+smooth_seconds = 3.0
+report_interval = 2.0
+
+[openrgb]
+host = "127.0.0.1"
+port = 6742

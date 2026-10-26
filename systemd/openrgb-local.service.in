@@ -1,0 +1,14 @@
+[Unit]
+Description=OpenRGB hardware controller (SDK on localhost)
+Documentation=https://openrgb.org/
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+Environment=QT_QPA_PLATFORM=offscreen
+ExecStart=@OPENRGB_BINARY@ --server --noautoconnect --server-host 127.0.0.1 --server-port 6742
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
