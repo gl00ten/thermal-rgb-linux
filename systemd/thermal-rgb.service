@@ -1,11 +1,15 @@
 [Unit]
-Description=Temperature-responsive CPU fan and GPU lighting
-Requires=openrgb-local.service
+Description=Temperature-controlled RGB lighting
+Wants=openrgb-local.service
 After=openrgb-local.service
 StartLimitIntervalSec=0
 
 [Service]
 Type=simple
+Nice=19
+IOSchedulingClass=idle
+CPUWeight=1
+IOWeight=1
 ExecStart=%h/.local/share/thermal-rgb/.venv/bin/python -u %h/.local/share/thermal-rgb/thermal_rgb.py
 Restart=on-failure
 RestartSec=7

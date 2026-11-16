@@ -1,0 +1,30 @@
+# Original X570-P / RTX 3080 profile (legacy format, still supported).
+# Copy to ~/.config/thermal-rgb/config.toml to use these explicit hardware settings.
+# Edit that file, then: systemctl --user restart thermal-rgb
+
+[devices]
+motherboard_name = "X570-P"       # ASUS PRIME X570-P
+argb_zone = "Aura Addressable 1"  # All 6 fans (shared header)
+argb_led_count = 8                # Known working zone size for this build
+gpu_name = "RTX 3080"            # Gigabyte RTX 3080 Gaming OC
+nvidia_gpu_index = 0
+
+[temperatures]
+room_temp = 25.0  # assumed reference, not an ambient sensor reading
+cpu_red = 90.0
+gpu_red = 85.0
+
+[animation]
+breathing = false  # legacy option; software animations are disabled
+cpu_max_brightness = 0.40
+gpu_max_brightness = 1.00
+sensor_interval = 60.0
+temperature_hysteresis = 2.0
+report_interval = 60.0  # reports only on sampling cycles, never adds wakeups
+diagnostics = false   # optional counters; query using ./manage.sh diagnostics
+# Legacy breath_min, breath_period, fan_interval, gpu_interval and smooth_seconds
+# are accepted but ignored.
+
+[openrgb]
+host = "127.0.0.1"
+port = 6742

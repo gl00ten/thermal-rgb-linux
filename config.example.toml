@@ -1,30 +1,45 @@
-# Copy is installed at ~/.config/thermal-rgb/config.toml.
-# Edit that file, then: systemctl --user restart thermal-rgb
-
-[devices]
-motherboard_name = "X570-P"       # ASUS PRIME X570-P
-argb_zone = "Aura Addressable 1"  # All 6 fans (shared header)
-argb_led_count = 8                # Known working zone size for this build
-gpu_name = "RTX 3080"            # Gigabyte RTX 3080 Gaming OC
-nvidia_gpu_index = 0
-
-[temperatures]
-room_temp = 25.0  # assumed reference, not an ambient sensor reading
-cpu_red = 90.0
-gpu_red = 85.0
+# General-purpose template: choose your sensor and OpenRGB device name.
+# First install creates a copy for you to edit before rerunning the installer.
+# Discover psutil sensors: python3 thermal_rgb.py --list-sensors
 
 [animation]
-breathing = true
-breath_min = 0.50
-breath_period = 6.0
-cpu_max_brightness = 0.40
-gpu_max_brightness = 1.00
-sensor_interval = 2.0
-fan_interval = 0.04  # maximum 25 fan updates/sec
-gpu_interval = 0.06  # maximum ~17 GPU updates/sec
-smooth_seconds = 3.0
-report_interval = 2.0
+sensor_interval = 60.0
+report_interval = 60.0
+temperature_hysteresis = 2.0
+diagnostics = false
+breathing = false  # legacy option; animations are always disabled
 
 [openrgb]
 host = "127.0.0.1"
 port = 6742
+
+[sensors.cpu]
+type = "auto_cpu"  # common AMD/Intel CPU sensors; no GPU required
+
+# Any psutil sensor can be selected explicitly, including exposed AMD/Intel GPU
+# sensors. Copy the driver and label from --list-sensors; names vary by machine.
+# [sensors.case]
+# type = "psutil"
+# driver = "YOUR SENSOR DRIVER"
+# label = "YOUR SENSOR LABEL"  # optional: filter by exact label (including "")
+# index = 0                  # index within filtered entries, or driver if no label
+
+# NVIDIA is optional. nvidia-smi is needed only when an output uses this source.
+# [sensors.gpu]
+# type = "nvidia"
+# index = 0
+
+[[outputs]]
+name = "cpu-lighting"
+sensor = "cpu"
+device = "YOUR OPENRGB DEVICE NAME"  # exact match preferred; unique substring accepted
+# zone = "YOUR ZONE NAME"          # omit to colour the whole device
+# led_count = 8                    # optional: only resize a zone reporting zero LEDs
+blue_temp = 25.0
+red_temp = 90.0
+brightness = 0.40
+
+# Add further [[outputs]] tables to control more devices/zones from any source.
+# Output names must be unique. Do not overlap whole-device and zone outputs.
+# Legacy breath_min, breath_period, fan_interval, gpu_interval, smooth_seconds
+# are still accepted but ignored. See examples/x570-rtx3080.toml for legacy config.

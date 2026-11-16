@@ -38,15 +38,37 @@ if ((${#missing[@]})); then
   echo "Installing missing packages with pacman: ${missing[*]}"
   sudo pacman -S --needed "${missing[@]}"
 fi
-command -v nvidia-smi >/dev/null || {
-  echo 'Missing nvidia-smi. Install a working NVIDIA driver before installing (do not blindly install nvidia-utils).' >&2
-  exit 1
-}
 OPENRGB_BIN="$(command -v openrgb || command -v OpenRGB)"
 [[ "$OPENRGB_BIN" = /* ]] || { echo 'OpenRGB binary path must be absolute.' >&2; exit 1; }
 
-# We own only these two user service names. Stop before replacing them.
-systemctl --user stop thermal-rgb.service openrgb-local.service 2>/dev/null || true
+# Prepare dependencies and validate before interrupting working services.
+mkdir -p "$APP_DIR" "$CONFIG_DIR" "$UNITS"
+if [[ ! -e "$CONFIG_DIR/config.toml" ]]; then
+  install -m 600 "$ROOT/config.example.toml" "$CONFIG_DIR/config.toml"
+  echo "Created configuration: $CONFIG_DIR/config.toml"
+  echo 'Set your sensor/device names in that file, then rerun ./install.sh.'
+  echo 'No services have been changed.'
+  exit 0
+else
+  echo "Preserving existing configuration: $CONFIG_DIR/config.toml"
+fi
+
+python3 -m venv "$APP_DIR/.venv"
+"$APP_DIR/.venv/bin/python" -m pip install -r "$ROOT/requirements.txt"
+"$APP_DIR/.venv/bin/python" "$ROOT/thermal_rgb.py" --check-config --config "$CONFIG_DIR/config.toml"
+
+# Read the already validated port for the managed SDK server.
+OPENRGB_PORT="$("$APP_DIR/.venv/bin/python" -c 'import sys, tomllib; print(tomllib.load(open(sys.argv[1], "rb")).get("openrgb", {}).get("port", 6742))' "$CONFIG_DIR/config.toml")"
+
+# Fresh installs have no units to stop. Any real stop failure aborts the upgrade.
+for name in thermal-rgb.service openrgb-local.service; do
+  if ! state="$(systemctl --user show "$name" -p LoadState --value)"; then
+    [[ "$state" == not-found ]] || { echo "Could not inspect $name; aborting upgrade." >&2; exit 1; }
+  fi
+  if [[ "$state" != not-found ]]; then
+    systemctl --user stop "$name"
+  fi
+done
 
 # Never kill a user GUI or second OpenRGB daemon automatically: they may have
 # unsaved settings. Refuse the install until it is closed to avoid USB/I2C races.
@@ -66,28 +88,17 @@ if systemctl is-active --quiet openrgb.service 2>/dev/null || systemctl --user i
   exit 1
 fi
 
-mkdir -p "$APP_DIR" "$CONFIG_DIR" "$UNITS"
 install -m 644 "$ROOT/thermal_rgb.py" "$APP_DIR/thermal_rgb.py"
-if [[ ! -e "$CONFIG_DIR/config.toml" ]]; then
-  install -m 600 "$ROOT/config.example.toml" "$CONFIG_DIR/config.toml"
-  echo "Created configuration: $CONFIG_DIR/config.toml"
-else
-  echo "Preserving existing configuration: $CONFIG_DIR/config.toml"
-fi
-
-python3 -m venv "$APP_DIR/.venv"
-"$APP_DIR/.venv/bin/python" -m pip install -r "$ROOT/requirements.txt"
-"$APP_DIR/.venv/bin/python" "$APP_DIR/thermal_rgb.py" --check-config --config "$CONFIG_DIR/config.toml"
 
 # Preserve any previous manually written service files before replacing them.
-stamp="$(date +%Y%m%d-%H%M%S)"
+stamp="$(date +%Y%m%d-%H%M%S-%N)"
 for name in openrgb-local.service thermal-rgb.service; do
   if [[ -f "$UNITS/$name" ]]; then
     cp -p "$UNITS/$name" "$UNITS/$name.backup-$stamp"
     echo "Backed up previous $name"
   fi
 done
-sed "s|@OPENRGB_BINARY@|$OPENRGB_BIN|g" "$ROOT/systemd/openrgb-local.service.in" > "$UNITS/openrgb-local.service"
+sed -e "s|@OPENRGB_BINARY@|$OPENRGB_BIN|g" -e "s|@OPENRGB_PORT@|$OPENRGB_PORT|g" "$ROOT/systemd/openrgb-local.service.in" > "$UNITS/openrgb-local.service"
 install -m 644 "$ROOT/systemd/thermal-rgb.service" "$UNITS/thermal-rgb.service"
 
 # Warn about desktop autostart: user GUI must not scan/control the same hardware.
