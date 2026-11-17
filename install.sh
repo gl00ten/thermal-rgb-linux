@@ -43,18 +43,22 @@ OPENRGB_BIN="$(command -v openrgb || command -v OpenRGB)"
 
 # Prepare dependencies and validate before interrupting working services.
 mkdir -p "$APP_DIR" "$CONFIG_DIR" "$UNITS"
+created=false
 if [[ ! -e "$CONFIG_DIR/config.toml" ]]; then
   install -m 600 "$ROOT/config.example.toml" "$CONFIG_DIR/config.toml"
   echo "Created configuration: $CONFIG_DIR/config.toml"
-  echo 'Set your sensor/device names in that file, then rerun ./install.sh.'
-  echo 'No services have been changed.'
-  exit 0
+  created=true
 else
   echo "Preserving existing configuration: $CONFIG_DIR/config.toml"
 fi
 
 python3 -m venv "$APP_DIR/.venv"
 "$APP_DIR/.venv/bin/python" -m pip install -r "$ROOT/requirements.txt"
+if [[ "$created" = true ]]; then
+  echo 'Set your sensor/device names in that file, then rerun ./install.sh.'
+  echo 'See the README quick start for device discovery. No services have been changed.'
+  exit 0
+fi
 "$APP_DIR/.venv/bin/python" "$ROOT/thermal_rgb.py" --check-config --config "$CONFIG_DIR/config.toml"
 
 # Read the already validated port for the managed SDK server.

@@ -7,35 +7,41 @@ and mixed setups use one sampling loop. Colours run from blue through cyan,
 green, yellow and orange to red, with brightness and temperature endpoints per
 output. This controls lighting, never cooling or fan speeds.
 
-## Low-overhead operation
+## Quick start
 
-- Sample immediately at startup, then every 60 seconds by default.
-- Sleep on an interruptible event between samples; no animation timers or worker threads.
-- Share one `psutil.sensors_temperatures()` snapshot per cycle and at most one
-  `nvidia-smi` query per configured NVIDIA GPU. Unused sources are not sampled.
-- Apply 2°C hysteresis relative to the last accepted temperature, then suppress
-  identical RGB values. Stable temperatures mean zero colour writes after setup.
-- Send at most one colour command per output per sample. Initial setup and
-  reconnection may set Direct mode and initialize an explicitly configured empty zone.
-- Leave the last static colour on shutdown, without additional hardware writes.
+```bash
+./install.sh            # first run creates your config
+```
 
-Frequent RGB commands can cause USB/SMBus transactions and contention. Avoiding
-repeated writes reduces that source of load; actual desktop latency must still
-be measured on your hardware. Both services use `Nice=19`, idle I/O scheduling,
-`CPUWeight=1` and `IOWeight=1`, without CPU quotas or memory limits. Scheduling
-support depends on systemd/cgroups and does not eliminate hardware bus contention.
+Close the OpenRGB GUI, then start only the SDK server to discover names:
 
-Failed readings keep their previous value for three sampling intervals (180
-seconds by default, minimum 10 seconds). Missing/stale sources show their output's
-red endpoint. Fallback and recovery bypass hysteresis. Each failed source logs
-once per cycle. Reports occur on sampling cycles and add no wakeups.
+```bash
+openrgb --server --noautoconnect --server-host 127.0.0.1
+```
 
-Failed outputs retry next cycle without clearing healthy outputs' colour history.
-A local TCP check detects closed connections without SDK requests; lighting stays
-running while OpenRGB restarts and initializes colours again after reconnecting.
-This does not detect an unresponsive server. Shutdown interrupts the wait
-immediately, but active sensor/SDK calls must return first. NVIDIA queries have
-a five-second timeout.
+In another terminal:
+
+```bash
+./manage.sh devices    # exact device and zone names
+./manage.sh sensors    # available temperature readings
+./manage.sh config     # replace the placeholders
+```
+
+Stop the manual server with Ctrl+C, then install and verify:
+
+```bash
+./install.sh
+./manage.sh doctor
+```
+
+The installer preserves your config and enables startup at login. `doctor`
+checks services, the installed app and configured device/zone names without
+changing lighting. If names do not match, it shows the available names.
+`--check-config` only validates the config file; it does not check hardware.
+
+The controller samples every 60 seconds, uses 2°C hysteresis and skips unchanged
+colours. Failed readings briefly retain their last value, then show red. It
+controls lighting, never cooling or fan speeds. Shutdown leaves the last colour.
 
 ## Supported hardware and platforms
 
@@ -79,8 +85,8 @@ python3 thermal_rgb.py --list-sensors
 ./manage.sh sensors
 ```
 
-Use the OpenRGB GUI to inspect exact device and zone names. **Close the GUI
-before running the installer or starting the managed server.** Run only one
+Use `./manage.sh devices` to inspect exact device and zone names from a running
+SDK server. **Close the GUI before running the installer or starting the managed server.** Run only one
 OpenRGB hardware controller; stop the services before using a GUI controller.
 Working OpenRGB device/udev permissions are required.
 
@@ -193,36 +199,11 @@ The units are `thermal-rgb.service` and `openrgb-local.service`. The managed SDK
 server listens on `127.0.0.1`, using `[openrgb].port` (6742 by default), and runs
 as your user. After changing the port, rerun the installer to update the server unit.
 
-## Diagnostics and benchmarking
+## Diagnostics
 
-Set `diagnostics = true` under `[animation]` and restart to enable counters.
-`./manage.sh diagnostics` requests a journal summary at the next sample, without
-adding a timer. Read it after up to one sampling interval:
-
-```bash
-journalctl --user -u thermal-rgb.service -n 20 --no-pager
-```
-
-Counters track attempted readings by source, successful colour commands by output,
-skipped updates and sensor failures since startup. Multiple outputs on one device
-have separate counters. These count SDK commands, not physical bus transactions,
-mode changes or zone resizes.
-
-For a before/after comparison, record each revision and config and measure ten
-minutes under the same idle conditions, then repeat during normal desktop use.
-Never run old and new controllers simultaneously.
-
-```bash
-sudo pacman -S --needed sysstat
-pidstat -u -w -p "$(systemctl --user show thermal-rgb -p MainPID --value),$(systemctl --user show openrgb-local -p MainPID --value)" 60 10
-systemctl --user show thermal-rgb openrgb-local -p CPUUsageNSec -p NRestarts
-```
-
-Compare CPU, context switches and CPUUsageNSec deltas for both processes. With
-stable readings, diagnostic summaries ten minutes apart should show roughly ten
-readings per source and zero additional colour writes (boundary timing may add
-one sample). Reconnection will initialize lighting again. Check mouse response
-under the same workload: process CPU measurements do not measure input latency.
+`./manage.sh doctor` checks setup. Use `./manage.sh logs` to follow runtime errors.
+For optional reading/write counters, set `diagnostics = true` under `[animation]`,
+restart, then run `./manage.sh diagnostics`. The summary appears on the next sample.
 
 ## Remove or test
 

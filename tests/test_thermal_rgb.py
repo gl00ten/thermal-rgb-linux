@@ -18,6 +18,44 @@ LEGACY_CONFIG = ROOT / "examples/x570-rtx3080.toml"
 
 
 class LogicTests(unittest.TestCase):
+    def test_discovery_lists_devices_without_valid_outputs_or_hardware_writes(self):
+        from thermal_rgb import main
+        zone = SimpleNamespace(name="Header", leds=[1, 2])
+        device = SimpleNamespace(name="Board", zones=[zone])
+        client = Mock(devices=[device])
+        module = SimpleNamespace(OpenRGBClient=Mock(return_value=client))
+        with tempfile.TemporaryDirectory() as directory:
+            config = Path(directory) / "config.toml"
+            config.write_text('[openrgb]\nport = 7777\n')
+            with patch.dict(sys.modules, {"openrgb": module}), \
+                 patch("sys.argv", ["thermal_rgb.py", "--config", str(config), "--list-devices"]), \
+                 patch("builtins.print") as output:
+                main()
+            output.assert_any_call("Board")
+            output.assert_any_call("  Header (2 LEDs)")
+            module.OpenRGBClient.assert_called_once_with("127.0.0.1", 7777, "thermal-rgb-inspect")
+            client.disconnect.assert_called_once()
+
+    def test_check_devices_does_not_initialize_lighting(self):
+        from thermal_rgb import main
+        device = Mock(name="device")
+        device.name = "YOUR OPENRGB DEVICE NAME"
+        client = Mock(devices=[device])
+        module = SimpleNamespace(OpenRGBClient=Mock(return_value=client))
+        with patch.dict(sys.modules, {"openrgb": module}), \
+             patch("sys.argv", ["thermal_rgb.py", "--config", str(ROOT / "config.example.toml"), "--check-devices"]), \
+             patch("builtins.print"):
+            main()
+        device.set_mode.assert_not_called()
+        device.set_color.assert_not_called()
+        device.update.assert_not_called()
+        client.disconnect.assert_called_once()
+
+    def test_missing_target_lists_available_names(self):
+        from thermal_rgb import match
+        with self.assertRaisesRegex(RuntimeError, "Available: 'Actual Board'"):
+            match([SimpleNamespace(name="Actual Board")], "Old Board")
+
     def test_example_config(self):
         c = read_config(LEGACY_CONFIG)
         self.assertEqual(c["devices"]["argb_led_count"], 8)
@@ -261,7 +299,7 @@ class LogicTests(unittest.TestCase):
                 if failure == "new":
                     self.assertEqual((config_dir / "config.toml").read_text(),
                                      (ROOT / "config.example.toml").read_text())
-                    self.assertFalse(log.exists())
+                    self.assertEqual(log.read_text(), "pip\n")
                     continue
                 self.assertEqual((config_dir / "config.toml").read_text(), original)
                 calls = log.read_text()
@@ -300,7 +338,7 @@ class LogicTests(unittest.TestCase):
         self.assertEqual(len(generic["outputs"]), 1)
         self.assertEqual(generic["sensors"], {"cpu": {"type": "auto_cpu"}})
         legacy = read_config(LEGACY_CONFIG)
-        self.assertEqual(legacy["outputs"][0]["device"], "X570-P")
+        self.assertEqual(legacy["outputs"][0]["device"], "ASUS PRIME X570-P")
         self.assertEqual(legacy["outputs"][0]["led_count"], 8)
         self.assertEqual(legacy["outputs"][1]["brightness"], 1)
 

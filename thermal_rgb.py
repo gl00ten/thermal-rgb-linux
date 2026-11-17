@@ -216,31 +216,38 @@ def connection_closed(client):
     return bool(poll.poll(0))
 
 
+def match(items, name):
+    exact = [item for item in items if item.name.casefold() == name.casefold()]
+    matches = exact or [item for item in items if name.casefold() in item.name.casefold()]
+    if len(matches) != 1:
+        available = ", ".join(repr(item.name) for item in items) or "none"
+        raise RuntimeError(f"{name!r} matched {len(matches)} targets. Available: {available}")
+    return matches[0]
+
+
+def resolve_outputs(available, config):
+    devices, selected = [], []
+    for output in config["outputs"]:
+        device = match(available, output["device"])
+        target = match(device.zones, output["zone"]) if "zone" in output else device
+        # Whole-device and zone outputs on the same device would conflict.
+        if any(previous is device and (zone is None or output.get("zone") is None
+                                      or zone is target)
+               for previous, zone in selected):
+            raise RuntimeError("Overlapping RGB outputs on the same device")
+        selected.append((device, target if "zone" in output else None))
+        devices.append((device, target, output))
+
+    return devices
+
+
 def setup_rgb(config):
     from openrgb import OpenRGBClient
 
     net = config["openrgb"]
     client = OpenRGBClient(net["host"], net["port"], "thermal-rgb-linux")
     try:
-        devices = []
-        selected = []
-        def match(items, name):
-            exact = [item for item in items if item.name.casefold() == name.casefold()]
-            matches = exact or [item for item in items if name.casefold() in item.name.casefold()]
-            if len(matches) != 1:
-                raise RuntimeError(f"'{name}' matched {len(matches)} targets; choose a unique device/zone name")
-            return matches[0]
-
-        for output in config["outputs"]:
-            device = match(client.devices, output["device"])
-            target = match(device.zones, output["zone"]) if "zone" in output else device
-            # Whole-device and zone outputs on the same device would conflict.
-            if any(previous is device and (zone is None or output.get("zone") is None
-                                          or zone is target)
-                   for previous, zone in selected):
-                raise RuntimeError("Overlapping RGB outputs on the same device")
-            selected.append((device, target if "zone" in output else None))
-            devices.append((device, target, output))
+        devices = resolve_outputs(client.devices, config)
 
         # Resolve every selector before changing hardware modes or zone sizes.
         initialized = set()
@@ -378,6 +385,8 @@ def main():
     parser.add_argument("--config", type=Path, default=CONFIG_FILE)
     parser.add_argument("--check-config", action="store_true", help="Validate config without hardware")
     parser.add_argument("--list-sensors", action="store_true", help="List psutil drivers/labels without OpenRGB")
+    parser.add_argument("--list-devices", action="store_true", help="List devices/zones from the running SDK server")
+    parser.add_argument("--check-devices", action="store_true", help="Check output names without changing lighting")
     args = parser.parse_args()
     if args.list_sensors:
         for driver, entries in psutil.sensors_temperatures().items():
@@ -387,6 +396,32 @@ def main():
                 label_counts[entry.label] = label_index + 1
                 print(f"driver={driver!r} driver_index={index} label={entry.label!r} "
                       f"label_index={label_index}: {entry.current}°C")
+        return
+    if args.list_devices or args.check_devices:
+        from openrgb import OpenRGBClient
+
+        client = None
+        try:
+            # Discovery works before the output placeholders have been configured.
+            raw = tomllib.loads(args.config.read_text()) if args.config.exists() else {}
+            net = raw.get("openrgb", {})
+            client = OpenRGBClient(net.get("host", "127.0.0.1"), net.get("port", 6742), "thermal-rgb-inspect")
+            if args.list_devices:
+                if not client.devices:
+                    print("No devices detected. Check OpenRGB device permissions.")
+                for device in client.devices:
+                    print(device.name)
+                    for zone in device.zones:
+                        print(f"  {zone.name} ({len(zone.leds)} LEDs)")
+            else:
+                for device, target, output in resolve_outputs(client.devices, read_config(args.config)):
+                    print(f"OK: {output['name']} -> {device.name}" +
+                          (f" / {target.name}" if "zone" in output else ""))
+        except Exception as exc:
+            parser.exit(1, f"Device check failed: {exc}\nCheck ./manage.sh status and ./manage.sh devices.\n")
+        finally:
+            if client is not None:
+                client.disconnect()
         return
     config = read_config(args.config)
     if args.check_config:

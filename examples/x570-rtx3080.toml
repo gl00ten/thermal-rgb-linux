@@ -3,8 +3,8 @@
 # Edit that file, then: systemctl --user restart thermal-rgb
 
 [devices]
-motherboard_name = "X570-P"       # ASUS PRIME X570-P
-argb_zone = "Aura Addressable 1"  # All 6 fans (shared header)
+motherboard_name = "ASUS PRIME X570-P"       # ASUS PRIME X570-P
+argb_zone = "Addressable RGB Header 1"  # All 6 fans (shared header)
 argb_led_count = 8                # Known working zone size for this build
 gpu_name = "RTX 3080"            # Gigabyte RTX 3080 Gaming OC
 nvidia_gpu_index = 0
